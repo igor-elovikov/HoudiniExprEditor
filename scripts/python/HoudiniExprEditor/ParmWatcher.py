@@ -31,6 +31,7 @@ import subprocess
 import hdefereval
 import tempfile
 import hashlib
+import json
 
 try:
     from PySide2 import QtCore
@@ -126,33 +127,19 @@ def set_external_editor():
 
 def get_external_editor():
 
-    editor = os.environ.get("EDITOR")
-    if not editor or not os.path.exists(editor):
+    editor = {"exe": None, "args": []}
+
+    if not editor["exe"]:
 
         cfg = get_config_file()
-        if os.path.exists(cfg):
-            with open(cfg, 'r') as f:
-                editor = f.read().strip()
+        with open(cfg, 'r') as f:
+            editor = json.load(f)
+            if "args" not in editor:
+                editor["args"] = []
+            if "exe" not in editor:
+                editor["exe"] = None
 
-        else:
-            editor = ""
-
-    if os.path.exists(editor):
-        return editor
-
-    else:
-
-        r = QtWidgets.QMessageBox.information(hou.ui.mainQtWindow(),
-                                             "Editor not set",
-                                             "No external editor set, pick one ?",
-                                             QtWidgets.QMessageBox.Yes,
-                                             QtWidgets.QMessageBox.Cancel)
-        if r == QtWidgets.QMessageBox.Cancel:
-            return
-
-        return set_external_editor()
-
-    return None
+    return editor
 
 def _read_file_data(file_name):
     # Some external editor ( like VSCode ) empty the file before saving it
@@ -463,13 +450,13 @@ def add_watcher(selection, type_="parm"):
         f.write(data)
 
     vsc = get_external_editor()
-    if not vsc:
+    if vsc["exe"] is None:
         hou.ui.setStatusMessage("No external editor set",
                                 severity=hou.severityType.Error)
         return
 
     p = QtCore.QProcess(parent=hou.ui.mainQtWindow())
-    p.start(vsc, [file_path])
+    p.start(vsc["exe"], vsc["args"] + [file_path])
     
     watcher = get_file_watcher()
 
