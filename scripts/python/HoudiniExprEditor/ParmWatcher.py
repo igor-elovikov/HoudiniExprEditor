@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 
 # MIT License
-# 
+#
 # Copyright (c) 2017-2020 Guillaume Jobst, www.cgtoolbox.com
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,43 +23,32 @@
 # SOFTWARE.
 #
 
-import hou
-import os
-import sys
-import time
-import subprocess
-import hdefereval
-import tempfile
 import hashlib
 import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
 
-try:
-    from PySide2 import QtCore
-    from PySide2 import QtWidgets
-    Slot = QtCore.Slot(str)
-except ImportError:
+import hdefereval
+import hou
+from hutil.PySide import QtCore, QtWidgets
 
-    try:
-        from PySide import QtCore
-        from PySide import QtGui as QtWidgets
-        Slot = QtCore.Slot(str)
-    except ImportError:
-        from PyQt import QtCore
-        from PyQt import QtGui as QtWidgets
-        Slot = QtCore.pyqtSlot(str)
+Slot = QtCore.Slot(str)
 
-TEMP_FOLDER = os.environ.get("EXTERNAL_EDITOR_TEMP_PATH",
-                             tempfile.gettempdir())
+
+TEMP_FOLDER = os.environ.get("EXTERNAL_EDITOR_TEMP_PATH", tempfile.gettempdir())
+
 
 def is_valid_parm(parm):
 
     template = parm.parmTemplate()
-    if template.dataType() in [hou.parmData.Float,
-                               hou.parmData.Int,
-                               hou.parmData.String]:
+    if template.dataType() in [hou.parmData.Float, hou.parmData.Int, hou.parmData.String]:
         return True
 
     return False
+
 
 def is_python_node(node):
 
@@ -71,6 +60,7 @@ def is_python_node(node):
         return True
     return False
 
+
 def clean_exp(parm):
 
     try:
@@ -79,23 +69,27 @@ def clean_exp(parm):
             exp = None
     except hou.OperationFailed:
         exp = None
-                        
+
     if exp is not None:
         parm.deleteAllKeyframes()
 
+
 def get_extra_file_scripts(node):
-    
+
     node_def = node.type().definition()
 
     if node_def is None:
         return []
 
     extra_file_options = node_def.extraFileOptions()
-    pymodules = [m.split('/')[0] for m in extra_file_options.keys() \
-                 if "IsPython" in m \
-                 and extra_file_options[m]]
+    pymodules = [
+        m.split("/")[0]
+        for m in extra_file_options.keys()
+        if "IsPython" in m and extra_file_options[m]
+    ]
 
     return pymodules
+
 
 def get_config_file():
 
@@ -104,26 +98,29 @@ def get_config_file():
     except hou.OperationFailed:
         return os.path.join(hou.expandString("$HOUDINI_USER_PREF_DIR"), "ExternalEditor.cfg")
 
+
 def set_external_editor():
 
-    r = QtWidgets.QFileDialog.getOpenFileName(hou.ui.mainQtWindow(),
-                                                "Select an external editor program")
+    r = QtWidgets.QFileDialog.getOpenFileName(
+        hou.ui.mainQtWindow(), "Select an external editor program"
+    )
     if r[0]:
 
         cfg = get_config_file()
 
-        with open(cfg, 'w') as f:
+        with open(cfg, "w") as f:
             f.write(r[0])
 
         root, file = os.path.split(r[0])
 
-        QtWidgets.QMessageBox.information(hou.ui.mainQtWindow(),
-                                          "Editor set",
-                                          "External editor set to: " + file)
+        QtWidgets.QMessageBox.information(
+            hou.ui.mainQtWindow(), "Editor set", "External editor set to: " + file
+        )
 
         return r[0]
 
     return None
+
 
 def get_external_editor():
 
@@ -132,7 +129,7 @@ def get_external_editor():
     if not editor["exe"]:
 
         cfg = get_config_file()
-        with open(cfg, 'r') as f:
+        with open(cfg, "r") as f:
             editor = json.load(f)
             if "args" not in editor:
                 editor["args"] = []
@@ -141,26 +138,28 @@ def get_external_editor():
 
     return editor
 
+
 def _read_file_data(file_name):
     # Some external editor ( like VSCode ) empty the file before saving it
     # this will trigger the file watcher and will read empty data. We try
     # to read it again after half a second to be sure the data is really empty or not.
     # For VSCode: https://github.com/microsoft/vscode/pull/62296
 
-    with open(file_name, 'r') as f:
+    with open(file_name, "r") as f:
         data = f.read()
-                
-    if data == '':
+
+    if data == "":
         time.sleep(0.5)
-        with open(file_name, 'r') as f:
+        with open(file_name, "r") as f:
             data = f.read()
 
     return data
 
+
 @QtCore.Slot(str)
 def filechanged(file_name):
-    """ Signal emitted by the watcher to update the parameter contents.
-        TODO: set expression when not a string parm.
+    """Signal emitted by the watcher to update the parameter contents.
+    TODO: set expression when not a string parm.
     """
     parms_bindings = getattr(hou.session, "PARMS_BINDINGS", None)
     if not parms_bindings:
@@ -178,7 +177,7 @@ def filechanged(file_name):
             tool = binding
         else:
             node = binding
-        
+
         try:
             if binding == "__temp__python_source_editor":
 
@@ -209,16 +208,20 @@ def filechanged(file_name):
 
                 section = "PythonCook"
                 if "_extraSection_" in file_name:
-                    section = file_name.split("_extraSection_")[-1].split('.')[0]
-                
+                    section = file_name.split("_extraSection_")[-1].split(".")[0]
+
                 # Block file watcher during module section update to prevent infinite loops in certain cases
                 watcher = get_file_watcher()
                 watcher.blockSignals(True)
                 node.type().definition().sections()[section].setContents(data)
                 watcher.blockSignals(False)
-                
+
             except hou.OperationFailed as e:
-                print("HoudiniExprEditor: Can't update module content {}, watcher will be removed.".format(e))
+                print(
+                    "HoudiniExprEditor: Can't update module content {}, watcher will be removed.".format(
+                        e
+                    )
+                )
                 remove_file_from_watcher(file_name)
                 del parms_bindings[file_name]
             return
@@ -234,7 +237,7 @@ def filechanged(file_name):
                 return
 
             data = _read_file_data(file_name)
-            
+
             template = parm.parmTemplate()
             if template.dataType() == hou.parmData.String:
                 parm.set(data)
@@ -246,7 +249,7 @@ def filechanged(file_name):
                     data = float(data)
 
                     clean_exp(parm)
-                        
+
                     parm.set(data)
                     return
 
@@ -271,9 +274,9 @@ def filechanged(file_name):
     except Exception as e:
         print("Watcher error: " + str(e))
 
+
 def get_file_ext(parm, type_="parm"):
-    """ Get the file name's extention according to parameter's temaplate.
-    """
+    """Get the file name's extention according to parameter's temaplate."""
 
     if type_ == "python_node":
         return ".py"
@@ -300,14 +303,14 @@ def get_file_ext(parm, type_="parm"):
         except hou.OperationFailed:
             return ".txt"
 
+
 def get_file_name(data, type_="parm"):
-    """ Construct an unique file name from a parameter with right extension.
-    """
+    """Construct an unique file name from a parameter with right extension."""
 
     if type_ == "parm":
         node = data.node()
         sid = str(node.sessionId())
-        file_name = sid + '_' + node.name() + '_' + data.name() + get_file_ext(data)
+        file_name = sid + "_" + node.name() + "_" + data.name() + get_file_ext(data)
         file_path = TEMP_FOLDER + os.sep + file_name
 
     elif type_ == "python_node" or "extra_section|" in type_:
@@ -315,14 +318,14 @@ def get_file_name(data, type_="parm"):
 
         name = data.name()
         if "extra_section|" in type_:
-            name += "_extraSection_" + type_.split('|')[-1]
+            name += "_extraSection_" + type_.split("|")[-1]
 
-        file_name = sid + '_' + name + get_file_ext(data, type_="python_node")
+        file_name = sid + "_" + name + get_file_ext(data, type_="python_node")
         file_path = TEMP_FOLDER + os.sep + file_name
 
     elif type_.startswith("__shelf_tool|"):
 
-        language = type_.split('|')[-1]
+        language = type_.split("|")[-1]
         if language == "python":
             file_name = "__shelf_tool_" + data.name() + ".py"
         else:
@@ -330,19 +333,22 @@ def get_file_name(data, type_="parm"):
         file_path = TEMP_FOLDER + os.sep + file_name
 
     elif type_ == "__temp__python_source_editor":
-        
+
         file_name = "__python_source_editor.py"
         file_path = TEMP_FOLDER + os.sep + file_name
 
     return file_path
 
+
 def get_file_watcher():
 
     return getattr(hou.session, "FILE_WATCHER", None)
 
+
 def get_parm_bindings():
 
     return getattr(hou.session, "PARMS_BINDINGS", None)
+
 
 def clean_files():
 
@@ -353,7 +359,7 @@ def clean_files():
 
         if bindings is not None and watcher is not None:
             for k, v in bindings.items():
-                
+
                 if isinstance(v, str) and v == "__temp__python_source_editor":
                     # never clean python source editor as it can't be deleted.
                     continue
@@ -378,9 +384,10 @@ def clean_files():
 
         for k in keys_to_delete:
             del bindings[k]
-            
+
     except Exception as e:
         print("HoudiniExprEditor: Can't clean files: " + str(e))
+
 
 def _node_deleted(node, **kwargs):
 
@@ -394,36 +401,39 @@ def _node_deleted(node, **kwargs):
     except Exception as e:
         print("Error un callback: onDelete: " + str(e))
 
+
 def add_watcher_to_section(selection):
-    
+
     sel_def = selection.type().definition()
-    if not sel_def: return
+    if not sel_def:
+        return
 
     sections = get_extra_file_scripts(selection)
-    r = hou.ui.selectFromList(sections, exclusive=True,
-                              title="Pick a section:")
-    if not r: return
+    r = hou.ui.selectFromList(sections, exclusive=True, title="Pick a section:")
+    if not r:
+        return
 
     section = sections[r[0]]
     add_watcher(selection, type_="extra_section|" + section)
 
-def add_watcher(selection, type_="parm"):
-    """ Create a file with the current parameter contents and 
-        create a file watcher, if not already created and found in hou.Session,
-        add the file to the list of watched files.
 
-        Link the file created to a parameter where the tool has been executed from
-        and when the file changed, edit the parameter contents with text contents.
+def add_watcher(selection, type_="parm"):
+    """Create a file with the current parameter contents and
+    create a file watcher, if not already created and found in hou.Session,
+    add the file to the list of watched files.
+
+    Link the file created to a parameter where the tool has been executed from
+    and when the file changed, edit the parameter contents with text contents.
     """
 
     file_path = get_file_name(selection, type_=type_)
-    
+
     if type_ == "parm":
-    # fetch parm content, either raw value or expression if any
+        # fetch parm content, either raw value or expression if any
         try:
             data = selection.expression()
         except hou.OperationFailed:
-            if os.environ.get("EXTERNAL_EDITOR_EVAL_EXPRESSION") == '1':
+            if os.environ.get("EXTERNAL_EDITOR_EVAL_EXPRESSION") == "1":
                 data = str(selection.eval())
             else:
                 data = str(selection.rawValue())
@@ -432,22 +442,22 @@ def add_watcher(selection, type_="parm"):
 
     elif "extra_section|" in type_:
 
-        sec_name = type_.split('|')[-1]
+        sec_name = type_.split("|")[-1]
         sec = selection.type().definition().sections().get(sec_name)
         if not sec:
             print("Error: No section {} found.".format(sec))
         data = sec.contents()
-    
+
     elif type_ == "__temp__python_source_editor":
-        
+
         data = hou.sessionModuleSource()
 
     elif type_.startswith("__shelf_tool|"):
-    
+
         data = selection.script()
 
     # use uft-8 only when nacessary
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         try:
             f.write(data)
         except UnicodeEncodeError:
@@ -455,19 +465,17 @@ def add_watcher(selection, type_="parm"):
 
     vsc = get_external_editor()
     if vsc["exe"] is None:
-        hou.ui.setStatusMessage("No external editor set",
-                                severity=hou.severityType.Error)
+        hou.ui.setStatusMessage("No external editor set", severity=hou.severityType.Error)
         return
 
     p = QtCore.QProcess(parent=hou.ui.mainQtWindow())
     p.start(vsc["exe"], vsc["args"] + [file_path])
-    
+
     watcher = get_file_watcher()
 
     if not watcher:
-    
-        watcher = QtCore.QFileSystemWatcher([file_path],
-                                            parent=hou.ui.mainQtWindow())
+
+        watcher = QtCore.QFileSystemWatcher([file_path], parent=hou.ui.mainQtWindow())
         watcher.fileChanged.connect(filechanged)
         hou.session.FILE_WATCHER = watcher
 
@@ -488,15 +496,15 @@ def add_watcher(selection, type_="parm"):
         # add "on removed" callback to remove file from watcher
         # when node is deleted
         if type_ == "python_node" or "extra_section|" in type_:
-            
-            selection.addEventCallback((hou.nodeEventType.BeingDeleted,),
-                                       _node_deleted)
+
+            selection.addEventCallback((hou.nodeEventType.BeingDeleted,), _node_deleted)
 
     clean_files()
 
+
 def parm_has_watcher(parm):
-    """ Check if a parameter has a watcher attached to it
-        Used to display or hide "Remove Watcher" menu.
+    """Check if a parameter has a watcher attached to it
+    Used to display or hide "Remove Watcher" menu.
     """
     file_name = get_file_name(parm)
     watcher = get_file_watcher()
@@ -512,9 +520,10 @@ def parm_has_watcher(parm):
 
     return False
 
+
 def tool_has_watcher(tool, type_=""):
-    """ Check if a shelf tool has a watcher attached to it
-        Used to display or hide "Remove Watcher" menu.
+    """Check if a shelf tool has a watcher attached to it
+    Used to display or hide "Remove Watcher" menu.
     """
     file_name = get_file_name(tool, type_=type_)
     watcher = get_file_watcher()
@@ -530,6 +539,7 @@ def tool_has_watcher(tool, type_=""):
 
     return False
 
+
 def remove_file_from_watcher(file_name):
 
     watcher = get_file_watcher()
@@ -539,15 +549,16 @@ def remove_file_from_watcher(file_name):
 
     return False
 
+
 def remove_file_watched(parm, type_="parm"):
-    """ Check if a given parameter's watched file exist and remove it
-        from watcher list, do not remove the file itself.
+    """Check if a given parameter's watched file exist and remove it
+    from watcher list, do not remove the file itself.
     """
-    
+
     file_name = get_file_name(parm, type_=type_)
     r = remove_file_from_watcher(file_name)
     if r:
         clean_files()
-        QtWidgets.QMessageBox.information(hou.ui.mainQtWindow(),
-                                          "Watcher Removed",
-                                          "Watcher removed on file: " + file_name)
+        QtWidgets.QMessageBox.information(
+            hou.ui.mainQtWindow(), "Watcher Removed", "Watcher removed on file: " + file_name
+        )
